@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .container { background: white; border-radius: 10px; padding: 40px; max-width: 500px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; }
+        .success-icon { font-size: 60px; margin-bottom: 20px; }
+        h1 { color: #667eea; margin-bottom: 20px; }
+        p { color: #666; margin-bottom: 15px; line-height: 1.6; }
+        .download-section { background: #f0f0f0; padding: 20px; border-radius: 5px; margin: 30px 0; }
+        .download-section h3 { color: #333; margin-bottom: 15px; }
+        .btn { background: #667eea; color: white; border: none; padding: 12px 30px; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 10px 5px; text-decoration: none; display: inline-block; transition: background 0.3s; }
+        .btn:hover { background: #764ba2; }
+        .btn-secondary { background: #999; }
+        .btn-secondary:hover { background: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✓</div>
+        <h1>Payment Successful!</h1>
+        <p>Thank you for your purchase. Your download link has been sent to your email.</p>
+        
+        <div class="download-section">
+            <h3>What's Next?</h3>
+            <p>Check your email for:</p>
+            <ul style="text-align: left; display: inline-block; color: #666;">
+                <li>✓ Order confirmation</li>
+                <li>✓ Secure download link</li>
+                <li>✓ Product access instructions</li>
+                <li>✓ Support information</li>
+            </ul>
+        </div>
+        
+        <p>The download link will expire in 14 days.</p>
+        
+        <div>
+            <button class="btn" onclick="window.location.href='/'">Back to Home</button>
+            <button class="btn btn-secondary" onclick="window.location.href='mailto:support@xiaofenghome.com'">Contact Support</button>
+        </div>
+    </div>
+</body>
+</html>

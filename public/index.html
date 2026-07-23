@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xiaofeng Global - Payment Plans</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 40px 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: white; margin-bottom: 50px; font-size: 36px; }
+        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+        .pricing-card { background: white; border-radius: 10px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.3s; }
+        .pricing-card:hover { transform: translateY(-10px); }
+        .pricing-card.featured { border: 3px solid #667eea; transform: scale(1.05); }
+        .plan-name { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333; }
+        .plan-price { font-size: 36px; color: #667eea; margin: 20px 0; font-weight: bold; }
+        .plan-price span { font-size: 16px; color: #999; }
+        .plan-description { color: #666; margin-bottom: 20px; font-size: 14px; }
+        .features { list-style: none; margin: 20px 0; }
+        .features li { padding: 8px 0; color: #666; border-bottom: 1px solid #eee; }
+        .features li:before { content: "✓ "; color: #667eea; font-weight: bold; margin-right: 10px; }
+        .btn { background: #667eea; color: white; border: none; padding: 12px 30px; border-radius: 5px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 20px; transition: background 0.3s; }
+        .btn:hover { background: #764ba2; }
+        .badge { display: inline-block; background: #667eea; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-top: 10px; }
+        .loading { display: none; text-align: center; padding: 20px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Xiaofeng Global - Choose Your Plan</h1>
+        
+        <div class="pricing-grid" id="pricingGrid"></div>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        async function loadProducts() {
+            try {
+                const response = await fetch('/api/payment/products');
+                const products = await response.json();
+                
+                const grid = document.getElementById('pricingGrid');
+                grid.innerHTML = '';
+                
+                products.forEach((product, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'pricing-card' + (index === 1 ? ' featured' : '');
+                    
+                    const features = {
+                        starter: ['Self-Guided Setup', 'Core Strategy', 'Email Support', 'Instant Access'],
+                        professional: ['Everything in Starter', '1-on-1 Consultation', 'Advanced Docs', '30-Day Priority Support'],
+                        enterprise: ['Everything in Professional', 'Global Deployment', 'Dedicated Manager', '24/7 Support']
+                    };
+                    
+                    card.innerHTML = `
+                        <div class="plan-name">${product.name}</div>
+                        <div class="plan-description">${product.description}</div>
+                        <div class="plan-price">$${(product.price / 100).toFixed(2)}</div>
+                        <ul class="features">
+                            ${features[product.tier].map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                        ${index === 1 ? '<div class="badge">Most Popular</div>' : ''}
+                        <button class="btn" onclick="checkout('${product.id}')">Buy Now</button>
+                    `;
+                    
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading products:', error);
+            }
+        }
+
+        async function checkout(productId) {
+            const name = prompt('Your Name:');
+            if (!name) return;
+            
+            const email = prompt('Your Email:');
+            if (!email) return;
+            
+            try {
+                const response = await fetch('/api/payment/create-intent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ productId, customerName: name, customerEmail: email })
+                });
+                
+                const data = await response.json();
+                const stripe = Stripe(data.publishableKey);
+                
+                // Redirect to Stripe payment page
+                await stripe.redirectToCheckout({
+                    lineItems: [{ price: productId, quantity: 1 }],
+                    mode: 'payment',
+                    successUrl: window.location.origin + '/success',
+                    cancelUrl: window.location.origin
+                });
+            } catch (error) {
+                alert('Payment error: ' + error.message);
+            }
+        }
+
+        loadProducts();
+    </script>
+</body>
+</html>
