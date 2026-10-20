@@ -16,7 +16,11 @@ const app = express();
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+// The Stripe webhook needs the raw body to verify its signature
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/payment/webhook') return next();
+  express.json()(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 

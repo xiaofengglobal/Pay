@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { formatMoney } = require('../utils/money');
 
 class EmailService {
   constructor() {
@@ -34,7 +35,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.SMTP_USER,
       to: process.env.ADMIN_EMAIL,
-      subject: `New Order - ${order.product_name} - $${(order.amount / 100).toFixed(2)}`,
+      subject: `New Order - ${order.product_name} - ${formatMoney(order.amount, order.currency)}`,
       html: this.getAdminNotificationTemplate(order)
     };
 
@@ -73,7 +74,7 @@ class EmailService {
             <ul>
               <li>Order ID: ${order.id}</li>
               <li>Product: ${order.product_name}</li>
-              <li>Amount: $${(order.amount / 100).toFixed(2)}</li>
+              <li>Amount: ${formatMoney(order.amount, order.currency)}</li>
               <li>Date: ${new Date(order.created_at).toLocaleString()}</li>
             </ul>
             <p>Your download link is below. It will expire in 14 days.</p>
@@ -97,7 +98,7 @@ class EmailService {
       <p><strong>Customer:</strong> ${order.customer_name}</p>
       <p><strong>Email:</strong> ${order.customer_email}</p>
       <p><strong>Product:</strong> ${order.product_name}</p>
-      <p><strong>Amount:</strong> $${(order.amount / 100).toFixed(2)}</p>
+      <p><strong>Amount:</strong> ${formatMoney(order.amount, order.currency)}</p>
       <p><strong>Order ID:</strong> ${order.id}</p>
       <p><strong>Status:</strong> ${order.status}</p>
     `;

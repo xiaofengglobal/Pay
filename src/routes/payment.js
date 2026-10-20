@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
+const { formatMoney } = require('../utils/money');
 
 module.exports = (stripe, db, emailService, telegramBot) => {
   const router = express.Router();
@@ -8,15 +9,16 @@ module.exports = (stripe, db, emailService, telegramBot) => {
   // Get products
   router.get('/products', async (req, res) => {
     try {
-      const products = await db.all('SELECT * FROM products');
-      res.json(products);
+      const products = await db.all('SELECT id, name, tier, price, currency, description FROM products ORDER BY price');
+      res.json(products.map(p => ({ ...p, display_price: formatMoney(p.price, p.currency) })));
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Create payment intent
-  router.post('/create-intent',
+  // Create a Stripe Checkout Session. The amount and currency come from the
+  // products table (seeded from src/catalog.js), so what the page shows is what gets charged.
+  router.post('/create-checkout-session',
     body('productId').notEmpty(),
     body('customerName').notEmpty(),
     body('customerEmail').isEmail(),
@@ -34,25 +36,83 @@ module.exports = (stripe, db, emailService, telegramBot) => {
           return res.status(404).json({ error: 'Product not found' });
         }
 
-        const paymentIntent = await stripe.paymentIntents.create({
-          amount: product.price,
-          currency: 'usd',
-          metadata: {
-            productId,
-            customerName,
-            customerEmail
-          }
+        const metadata = { productId, customerName, customerEmail };
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          line_items: [{
+            price_data: {
+              currency: product.currency,
+              product: product.stripe_product_id,
+              unit_amount: product.price
+            },
+            quantity: 1
+          }],
+          payment_method_types: ['card', 'wechat_pay', 'alipay'],
+          payment_method_options: { wechat_pay: { client: 'web' } },
+          customer_email: customerEmail,
+          metadata,
+          payment_intent_data: { metadata },
+          success_url: `${baseUrl}/success`,
+          cancel_url: baseUrl
         });
 
-        res.json({
-          clientSecret: paymentIntent.client_secret,
-          publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
-        });
+        res.json({ url: session.url });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     }
   );
+
+  async function fulfillOrder(session) {
+    const { productId, customerName, customerEmail } = session.metadata;
+
+    // Stripe retries events until we answer 2xx, so a retry may find the order
+    // already recorded; only skip it once delivery has finished.
+    const existing = await db.get('SELECT id, status FROM orders WHERE stripe_payment_intent_id = ?', [session.payment_intent]);
+    if (existing && existing.status === 'completed') return;
+
+    const orderId = existing ? existing.id : uuidv4();
+    const product = await db.get('SELECT * FROM products WHERE id = ?', [productId]);
+
+    if (!existing) {
+      await db.run(
+        'INSERT INTO orders (id, product_id, customer_name, customer_email, amount, currency, stripe_payment_intent_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [orderId, productId, customerName, customerEmail, session.amount_total, session.currency, session.payment_intent, 'pending']
+      );
+    }
+
+    // Create download link
+    const DownloadService = require('../services/downloads');
+    const downloadService = new DownloadService(db);
+    const downloadLink = await downloadService.createDownloadLink(orderId);
+
+    // Send emails
+    const fullOrder = {
+      id: orderId,
+      product_id: productId,
+      product_name: product.name,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      amount: session.amount_total,
+      currency: session.currency,
+      status: 'completed',
+      created_at: new Date().toISOString()
+    };
+
+    await emailService.sendOrderConfirmation(fullOrder, downloadLink.url);
+    await emailService.sendAdminNotification(fullOrder);
+
+    // Send Telegram notification
+    const message = `New Order!\n\nCustomer: ${customerName}\nProduct: ${product.name}\nAmount: ${formatMoney(session.amount_total, session.currency)}\nOrder ID: ${orderId}`;
+
+    if (process.env.TELEGRAM_CHAT_ID) {
+      await telegramBot.sendMessage(process.env.TELEGRAM_CHAT_ID, message);
+    }
+
+    await db.run('UPDATE orders SET status = ? WHERE id = ?', ['completed', orderId]);
+  }
 
   // Webhook for Stripe
   router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -65,44 +125,12 @@ module.exports = (stripe, db, emailService, telegramBot) => {
         process.env.STRIPE_WEBHOOK_SECRET
       );
 
-      if (event.type === 'payment_intent.succeeded') {
-        const paymentIntent = event.data.object;
-        const { productId, customerName, customerEmail } = paymentIntent.metadata;
-
-        // Create order
-        const orderId = uuidv4();
-        const product = await db.get('SELECT * FROM products WHERE id = ?', [productId]);
-
-        await db.run(
-          'INSERT INTO orders (id, product_id, customer_name, customer_email, amount, stripe_payment_intent_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [orderId, productId, customerName, customerEmail, paymentIntent.amount, paymentIntent.id, 'completed']
-        );
-
-        // Create download link
-        const DownloadService = require('../services/downloads');
-        const downloadService = new DownloadService(db);
-        const downloadLink = await downloadService.createDownloadLink(orderId);
-
-        // Send emails
-        const fullOrder = {
-          id: orderId,
-          product_id: productId,
-          product_name: product.name,
-          customer_name: customerName,
-          customer_email: customerEmail,
-          amount: paymentIntent.amount,
-          created_at: new Date().toISOString()
-        };
-
-        await emailService.sendOrderConfirmation(fullOrder, downloadLink.url);
-        await emailService.sendAdminNotification(fullOrder);
-
-        // Send Telegram notification
-        const message = `New Order!\n\nCustomer: ${customerName}\nProduct: ${product.name}\nAmount: $${(paymentIntent.amount / 100).toFixed(2)}\nOrder ID: ${orderId}`;
-        
-        if (process.env.TELEGRAM_CHAT_ID) {
-          await telegramBot.sendMessage(process.env.TELEGRAM_CHAT_ID, message);
-        }
+      const session = event.data.object;
+      if (
+        (event.type === 'checkout.session.completed' && session.payment_status === 'paid') ||
+        event.type === 'checkout.session.async_payment_succeeded'
+      ) {
+        await fulfillOrder(session);
       }
 
       res.json({ received: true });
