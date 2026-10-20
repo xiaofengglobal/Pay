@@ -38,7 +38,7 @@ module.exports = (downloadService, db) => {
       );
 
       // Get file path
-      const filePath = downloadService.getProductFilePath(order.product_name);
+      const filePath = downloadService.getProductFilePath(order.product_tier);
 
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({ error: 'File not found' });

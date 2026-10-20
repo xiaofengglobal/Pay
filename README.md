@@ -15,19 +15,21 @@ A complete, enterprise-grade payment system for handling three product tiers wit
 
 ## Products
 
-### Starter Plan - $149
+All prices are in CNY and live in `src/catalog.js`; the page, Stripe Checkout, emails and Telegram all read from there.
+
+### Starter Plan - ¥199
 - Self-Guided Growth Kit
 - Core strategy playbook
 - Setup guide
 - Email support
 
-### Professional Plan - $329
+### Professional Plan - ¥999
 - Everything in Starter
 - 1-on-1 consultation
 - Advanced documentation
 - 30-day priority support
 
-### Enterprise Plan - $1,299+
+### Enterprise Plan - ¥2,999+
 - Everything in Professional
 - Global infrastructure deployment
 - Dedicated account manager
@@ -88,7 +90,7 @@ npm start
 
 ### Payment
 - `GET /api/payment/products` - Get all products
-- `POST /api/payment/create-intent` - Create Stripe payment intent
+- `POST /api/payment/create-checkout-session` - Create a Stripe Checkout Session (card, WeChat Pay, Alipay)
 - `POST /api/payment/webhook` - Stripe webhook
 
 ### Downloads
@@ -107,7 +109,8 @@ npm start
 2. Developers → Webhooks
 3. Add endpoint: `https://your-domain.com/api/payment/webhook`
 4. Select events:
-   - `payment_intent.succeeded`
+   - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
 5. Copy the signing secret to `STRIPE_WEBHOOK_SECRET`
 
 ## Database

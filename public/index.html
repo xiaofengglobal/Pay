@@ -33,7 +33,6 @@
         <div class="pricing-grid" id="pricingGrid"></div>
     </div>
 
-    <script src="https://js.stripe.com/v3/"></script>
     <script>
         async function loadProducts() {
             try {
@@ -56,7 +55,7 @@
                     card.innerHTML = `
                         <div class="plan-name">${product.name}</div>
                         <div class="plan-description">${product.description}</div>
-                        <div class="plan-price">$${(product.price / 100).toFixed(2)}</div>
+                        <div class="plan-price">${product.display_price}</div>
                         <ul class="features">
                             ${features[product.tier].map(f => `<li>${f}</li>`).join('')}
                         </ul>
@@ -79,22 +78,17 @@
             if (!email) return;
             
             try {
-                const response = await fetch('/api/payment/create-intent', {
+                const response = await fetch('/api/payment/create-checkout-session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ productId, customerName: name, customerEmail: email })
                 });
-                
+
                 const data = await response.json();
-                const stripe = Stripe(data.publishableKey);
-                
-                // Redirect to Stripe payment page
-                await stripe.redirectToCheckout({
-                    lineItems: [{ price: productId, quantity: 1 }],
-                    mode: 'payment',
-                    successUrl: window.location.origin + '/success',
-                    cancelUrl: window.location.origin
-                });
+                if (!response.ok) throw new Error(data.error || 'Could not start checkout');
+
+                // Stripe Checkout charges exactly the amount shown on this page
+                window.location.href = data.url;
             } catch (error) {
                 alert('Payment error: ' + error.message);
             }

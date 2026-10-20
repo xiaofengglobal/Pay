@@ -43,7 +43,7 @@ class DownloadService {
   async getOrderByDownloadToken(token) {
     const download = await this.validateToken(token);
     const order = await this.db.get(
-      'SELECT o.*, p.name as product_name FROM orders o JOIN products p ON o.product_id = p.id WHERE o.id = ?',
+      'SELECT o.*, p.name as product_name, p.tier as product_tier FROM orders o JOIN products p ON o.product_id = p.id WHERE o.id = ?',
       [download.order_id]
     );
 
@@ -63,7 +63,7 @@ class DownloadService {
     );
   }
 
-  getProductFilePath(productName) {
+  getProductFilePath(tier) {
     const productsPath = process.env.PRODUCTS_PATH || '/home/ubuntu/pay/products';
     
     const fileMap = {
@@ -72,7 +72,7 @@ class DownloadService {
       'enterprise': 'deployment-guide.pdf'
     };
 
-    const fileName = fileMap[productName.toLowerCase()] || 'guide.pdf';
+    const fileName = fileMap[tier] || 'guide.pdf';
     return path.join(productsPath, fileName);
   }
 

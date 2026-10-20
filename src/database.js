@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const catalog = require('./catalog');
 
 class Database {
   constructor() {
@@ -24,6 +25,8 @@ class Database {
             name TEXT NOT NULL,
             tier TEXT NOT NULL,
             price INTEGER NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'cny',
+            stripe_product_id TEXT,
             description TEXT,
             file_path TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -38,6 +41,7 @@ class Database {
             customer_name TEXT NOT NULL,
             customer_email TEXT NOT NULL,
             amount INTEGER NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'cny',
             stripe_payment_intent_id TEXT,
             status TEXT DEFAULT 'pending',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -68,7 +72,27 @@ class Database {
             accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (download_id) REFERENCES downloads(id)
           )
-        `, (err) => {
+        `);
+
+        // Databases created before prices were unified on CNY lack these columns;
+        // "duplicate column" errors on newer databases are expected and ignored.
+        this.db.run(`ALTER TABLE products ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'`, () => {});
+        this.db.run(`ALTER TABLE products ADD COLUMN stripe_product_id TEXT`, () => {});
+        this.db.run(`ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'`, () => {});
+
+        // Sync the products table with src/catalog.js on every start
+        const upsert = this.db.prepare(`
+          INSERT INTO products (id, name, tier, price, currency, stripe_product_id, description)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name, tier = excluded.tier, price = excluded.price,
+            currency = excluded.currency, stripe_product_id = excluded.stripe_product_id,
+            description = excluded.description
+        `);
+        catalog.products.forEach(p => {
+          upsert.run(p.id, p.name, p.tier, p.price, catalog.CURRENCY, p.stripeProductId, p.description);
+        });
+        upsert.finalize((err) => {
           if (err) reject(err);
           else resolve();
         });
